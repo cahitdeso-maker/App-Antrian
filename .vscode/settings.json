@@ -1,0 +1,13 @@
+{
+  "[php]": {
+    "editor.defaultFormatter": "open-southeners.laravel-pint",
+    "editor.formatOnSave": true
+  },
+
+  "laravel-pint.enable": true,
+  "laravel-pint.executablePath": "vendor/bin/pint",
+  "workbench.editor.empty.hint": "hidden",
+  "workbench.editor.enablePreview": false,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true
+}

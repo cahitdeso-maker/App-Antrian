@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775894969285,
+      "tag": "0000_productive_millenium_guard",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "type": "youtube",
+  "youtubeUrls": [
+    "https://www.youtube.com/watch?v=827HSYJX5uw&list=RD827HSYJX5uw&start_radio=1&rv=75LBllz4n5A"
+  ],
+  "currentUrlIndex": 0,
+  "uploadedFile": null,
+  "activeSource": "youtube"
+}
