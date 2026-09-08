@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { users, accounts, sessions } from '@/lib/schema';
-import { eq, and } from 'drizzle-orm';
+import { users, sessions } from '@/lib/schema';
+import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
@@ -47,29 +47,8 @@ export async function POST(request: NextRequest) {
     const foundUser = user[0];
     console.log('[custom-sign-in] User ID:', foundUser.id);
 
-    // First try to find account with credential provider
-    const account = await db
-      .select()
-      .from(accounts)
-      .where(
-        and(
-          eq(accounts.userId, foundUser.id),
-          eq(accounts.providerId, 'credential')
-        )
-      )
-      .limit(1);
-
-    let passwordHash: string | null = null;
-
-    if (account.length > 0) {
-      // Use password from account table (Better Auth style)
-      passwordHash = account[0].password;
-      console.log('[custom-sign-in] Using password from account table');
-    } else if (foundUser.password) {
-      // Fallback to user table password
-      passwordHash = foundUser.password;
-      console.log('[custom-sign-in] Using password from user table');
-    }
+    // Password hash wordt direct uit de tabel user gehaald (geen account meer).
+    const passwordHash = foundUser.password;
 
     if (!passwordHash) {
       return NextResponse.json(

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createQueue, getQueues } from '@/lib/queue';
+import { createQueue, getQueues, getCurrentShift } from '@/lib/queue';
 
 // POST /api/queue - Create a new queue
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { patientType, shift } = body;
+    const { patientType } = body;
 
-    if (!patientType || !shift) {
+    if (!patientType) {
       return NextResponse.json(
-        { error: 'patientType and shift are required' },
+        { error: 'patientType is required' },
         { status: 400 }
       );
     }
@@ -21,18 +21,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['PAGI', 'SIANG'].includes(shift)) {
-      return NextResponse.json(
-        { error: 'shift must be PAGI or SIANG' },
-        { status: 400 }
-      );
-    }
+    // Shift is NOT chosen by the visitor anymore. It is determined
+    // automatically by the current time when the visitor prints the number
+    // (Pagi 05:00-12:00, Siang mulai 12:01). We always use server time.
+    const shift = getCurrentShift();
 
     const queue = await createQueue(patientType, shift);
 
     return NextResponse.json({
       success: true,
       queueNumber: queue.queue_number,
+      shift,
       queue,
     });
   } catch (error) {

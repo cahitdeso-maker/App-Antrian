@@ -7,6 +7,7 @@ interface QueueEntry {
   shift: 'PAGI' | 'SIANG';
   status: 'MENUNGGU' | 'DIPANGGIL' | 'SELESAI' | 'DILEWATI';
   created_at: string;
+  updated_at?: string;
 }
 
 class InMemoryStorage {
@@ -26,6 +27,7 @@ class InMemoryStorage {
   addQueue(queue: Omit<QueueEntry, 'id'>): QueueEntry {
     const newQueue = {
       ...queue,
+      updated_at: queue.updated_at || queue.created_at,
       id: Date.now(),
     };
     this.queues.push(newQueue);
@@ -65,6 +67,8 @@ class InMemoryStorage {
     const index = this.queues.findIndex(q => q.id === id);
     if (index !== -1) {
       this.queues[index].status = status;
+      // Always bump updated_at so re-calls ("Panggil Ulang") are detectable
+      this.queues[index].updated_at = new Date().toISOString();
       return true;
     }
     return false;
@@ -72,15 +76,17 @@ class InMemoryStorage {
 
   getNextQueueNumber(patientType: 'BPJS' | 'UMUM', shift: 'PAGI' | 'SIANG'): number {
     const today = new Date().toDateString();
-    const key = `${patientType}-${shift}-${today}`;
-    
-    // Get or initialize counter for this combination
+    // Counter is PER PATIENT TYPE per day (BPJS/UMUM each have their own
+    // sequence), continuous across shifts, and restarts on a new day.
+    const key = `${patientType}-${today}`;
+
+    // Get or initialize counter
     const currentCount = this.queueCounters.get(key) || 0;
     const nextNumber = currentCount + 1;
-    
+
     // Update counter
     this.queueCounters.set(key, nextNumber);
-    
+
     return nextNumber;
   }
 

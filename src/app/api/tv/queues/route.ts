@@ -10,8 +10,18 @@ export async function GET() {
       limit: 100,
     });
 
+    // Sort by last call time (updated_at) DESC so 'current' reflects the
+    // most recently CALLED queue, not the most recently CREATED one.
+    // This matters for "Panggil Ulang" where an older queue number is
+    // re-called and its updated_at becomes the newest.
+    const sortedCalled = [...calledQueues].sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt).getTime() -
+        new Date(a.updatedAt || a.createdAt).getTime()
+    );
+
     // Get the most recently called queue for display
-    const currentQueue = calledQueues.length > 0 ? calledQueues[0] : null;
+    const currentQueue = sortedCalled.length > 0 ? sortedCalled[0] : null;
 
     // Group called queues by loket
     const loketData: Record<string, any> = {
@@ -23,7 +33,7 @@ export async function GET() {
 
     // Get the last called queue for each loket
     for (const loket of ['LOKET_1', 'LOKET_2', 'LOKET_3', 'LOKET_4']) {
-      const loketQueue = calledQueues.find(q => q.loket === loket);
+      const loketQueue = sortedCalled.find(q => q.loket === loket);
       loketData[loket] = loketQueue || null;
     }
 
@@ -32,7 +42,7 @@ export async function GET() {
       queues: {
         current: currentQueue,
         lokets: loketData,
-        allCalled: calledQueues,
+        allCalled: sortedCalled,
       },
     });
   } catch (error) {

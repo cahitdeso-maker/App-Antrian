@@ -19,16 +19,15 @@ const initializeCounters = async () => {
     const db = await ensureDb();
     const today = new Date().toISOString().split('T')[0];
 
-    // Get max count for each patientType + shift combination today
-    const combinations = [
-      { patientType: 'UMUM' as const, shift: 'PAGI' as const, prefix: 'A' },
-      { patientType: 'UMUM' as const, shift: 'SIANG' as const, prefix: 'A' },
-      { patientType: 'BPJS' as const, shift: 'PAGI' as const, prefix: 'B' },
-      { patientType: 'BPJS' as const, shift: 'SIANG' as const, prefix: 'B' },
+    // Get max count for each patient type today (sequence is shared across
+    // shifts Pagi/Siang; only patient type BPJS/UMUM is distinguished)
+    const patientTypes = [
+      { patientType: 'UMUM' as const },
+      { patientType: 'BPJS' as const },
     ];
 
-    for (const { patientType, shift, prefix } of combinations) {
-      const counterKey = `${patientType}-${shift}-${today}`;
+    for (const { patientType } of patientTypes) {
+      const counterKey = `${patientType}-${today}`;
       
       const result = await db
         .select({
@@ -38,7 +37,6 @@ const initializeCounters = async () => {
         .where(
           and(
             eq(queues.patientType, patientType),
-            eq(queues.shift, shift),
             gte(queues.createdAt, sql`DATE(NOW())`)
           )
         );
@@ -61,10 +59,12 @@ const getQueuePrefix = (patientType: 'BPJS' | 'UMUM'): string => {
   return patientType === 'BPJS' ? 'B' : 'A';
 };
 
-// Get current shift based on time
+// Get current shift based on time.
+// Pagi  : 05:00 s/d 12:00  (hour 0 s/d 11)
+// Siang : mulai 12:01      (hour 12 ke atas)
 export const getCurrentShift = (): 'PAGI' | 'SIANG' => {
   const hour = new Date().getHours();
-  return hour < 13 ? 'PAGI' : 'SIANG';
+  return hour < 12 ? 'PAGI' : 'SIANG';
 };
 
 // Ensure db is available
@@ -104,7 +104,8 @@ export const generateQueueNumber = async (
 
   const db = await ensureDb();
 
-  // Count how many queues exist for this patient type and shift today
+  // Count how many queues exist for this patient type today (shared across
+  // shifts Pagi/Siang; only patient type BPJS/UMUM is distinguished)
   const countResult = await db
     .select({
       count: sql<number>`COUNT(*)`,
@@ -113,7 +114,6 @@ export const generateQueueNumber = async (
     .where(
       and(
         eq(queues.patientType, patientType),
-        eq(queues.shift, shift),
         gte(queues.createdAt, sql`DATE(NOW())`)
       )
     );
@@ -124,40 +124,60 @@ export const generateQueueNumber = async (
   return `${prefix}-${String(nextNumber).padStart(3, '0')}`;
 };
 
-// Create a new queue with auto-increment number
+// Create a new queue with auto-increment number.
+// THE KEY FIX: the next number is derived from the DATABASE (count of today's
+// queues), NOT from an in-memory counter. The in-memory counter was wiped on
+// dev-server hot-reload/restart, which made numbers restart from 001 even
+// though earlier queues already existed.
+//
+// The count is PER PATIENT TYPE PER DAY (BPJS and UMUM each have their own
+// continuous sequence) and spans both shifts (PAGI/SIANG). It only restarts on
+// a new day. Example: BPJS -> B-001, B-002... and UMUM -> A-001, A-002...
+// independently.
 export const createQueue = async (
   patientType: 'BPJS' | 'UMUM',
   shift: 'PAGI' | 'SIANG'
 ) => {
   const prefix = patientType === 'BPJS' ? 'B' : 'A';
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const counterKey = `${patientType}-${shift}-${today}`;
-  
-  // Get or initialize counter for today
-  if (!queueCounters.has(counterKey)) {
-    // Initialize counter from database or in-memory
-    queueCounters.set(counterKey, 0);
-  }
-  
-  const currentCount = queueCounters.get(counterKey)! + 1;
-  queueCounters.set(counterKey, currentCount);
-  
-  const queueNumber = `${prefix}-${String(currentCount).padStart(3, '0')}`;
-  
-  console.log(`[createQueue] ${patientType} + ${shift} => ${queueNumber} (count: ${currentCount})`);
-
   const dbAvailable = await isDatabaseAvailable();
+
+  let nextNumber: number;
+  if (dbAvailable) {
+    try {
+      const conn = await getRawConnection();
+      // Count today's queues for THIS patient type (BPJS/UMUM each keep their
+      // own sequence). DATE(NOW()) matches the DB-inserted created_at (also
+      // NOW()), and spans the whole day so it continues across Pagi -> Siang
+      // and restarts on a new day.
+      const [rows] = await conn.execute(
+        'SELECT COUNT(*) AS cnt FROM queues WHERE patient_type = ? AND created_at >= DATE(NOW())',
+        [patientType]
+      );
+      nextNumber = ((rows as any[])[0]?.cnt || 0) + 1;
+    } catch (error) {
+      console.error('[createQueue] ❌ Count query failed, using in-memory fallback:', error);
+      nextNumber = inMemoryStorage.getNextQueueNumber(patientType, shift);
+    }
+  } else {
+    // Fallback to in-memory storage for development.
+    nextNumber = inMemoryStorage.getNextQueueNumber(patientType, shift);
+  }
+
+  const queueNumber = `${prefix}-${String(nextNumber).padStart(3, '0')}`;
+
+  console.log(`[createQueue] ${patientType} + ${shift} => ${queueNumber} (count: ${nextNumber})`);
+
+  const queueRecord = {
+    queue_number: queueNumber,
+    patient_type: patientType,
+    shift: shift,
+    status: 'MENUNGGU' as const,
+    created_at: new Date().toISOString(),
+  };
 
   if (!dbAvailable) {
     // Fallback to in-memory storage for development
-    const queue = inMemoryStorage.addQueue({
-      queue_number: queueNumber,
-      patient_type: patientType,
-      shift: shift,
-      status: 'MENUNGGU',
-      created_at: new Date().toISOString(),
-    });
-    return queue;
+    return inMemoryStorage.addQueue(queueRecord);
   }
 
   try {
@@ -178,7 +198,7 @@ export const createQueue = async (
 
     const queue = (queueResult as any[])[0];
     console.log(`[createQueue] ✅ Inserted to database:`, queue);
-    
+
     return {
       id: queue.id,
       queue_number: queue.queue_number,
@@ -196,17 +216,9 @@ export const createQueue = async (
     console.error('Error:', error);
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('[createQueue] Falling back to in-memory');
-    
-    // Fallback to in-memory if DB insert fails
-    const queue = inMemoryStorage.addQueue({
-      queue_number: queueNumber,
-      patient_type: patientType,
-      shift: shift,
-      status: 'MENUNGGU',
-      created_at: new Date().toISOString(),
-    });
 
-    return queue;
+    // Fallback to in-memory if DB insert fails
+    return inMemoryStorage.addQueue(queueRecord);
   }
 };
 
@@ -239,7 +251,7 @@ export const getQueues = async (filters?: {
       shift: q.shift,
       status: q.status,
       createdAt: q.created_at,
-      updatedAt: q.created_at,
+      updatedAt: q.updated_at || q.created_at,
     }));
   }
 
@@ -315,8 +327,12 @@ export const callQueue = async (id: number, loket?: string) => {
 
   try {
     const conn = await getRawConnection();
+    // Explicitly set updated_at = NOW() so that a re-call ("Panggil Ulang")
+    // of the same queue to the same loket still bumps the timestamp.
+    // MySQL's ON UPDATE CURRENT_TIMESTAMP only fires when a column value
+    // actually changes, so without this the TV would not detect the recall.
     await conn.execute(
-      'UPDATE queues SET status = ?, loket = ? WHERE id = ?',
+      'UPDATE queues SET status = ?, loket = ?, updated_at = NOW() WHERE id = ?',
       ['DIPANGGIL', loket || null, id]
     );
     return { id, loket };

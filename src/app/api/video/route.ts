@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
 import path from 'path';
+import { loadYoutubeEntries, saveYoutubeEntries } from '@/lib/videoDb';
 
 const VIDEO_DIR = path.join(process.cwd(), 'public', 'videos');
 const CONFIG_FILE = path.join(VIDEO_DIR, 'video-config.json');
@@ -11,6 +12,7 @@ interface VideoConfig {
   type: 'upload' | 'youtube' | null;
   activeSource: 'upload' | 'youtube' | null; // Which source is currently playing
   youtubeUrls: string[]; // Array untuk playlist
+  youtubeTitles: string[]; // Array judul video untuk playlist (keyama dengan youtubeUrls)
   currentUrlIndex: number;
   uploadedFile: string | null; // Legacy: single uploaded file
   uploadedFiles: string[]; // Array untuk multiple uploaded videos
@@ -26,6 +28,7 @@ async function getVideoConfig(): Promise<VideoConfig> {
       // Backward compatibility: ensure new fields exist
       return {
         ...config,
+        youtubeTitles: config.youtubeTitles || [],
         uploadedFiles: config.uploadedFiles || [],
         currentUploadIndex: config.currentUploadIndex || 0,
       };
@@ -37,6 +40,7 @@ async function getVideoConfig(): Promise<VideoConfig> {
     type: null, 
     activeSource: null, 
     youtubeUrls: [], 
+    youtubeTitles: [],
     currentUrlIndex: 0, 
     uploadedFile: null,
     uploadedFiles: [],
@@ -116,6 +120,18 @@ export async function GET() {
       }
     }
 
+    // If config has no YouTube entries, fall back to the database (the
+    // persistent store for the YouTube playlist).
+    let youtubeUrls = config.youtubeUrls || [];
+    let youtubeTitles = config.youtubeTitles || [];
+    if (youtubeUrls.length === 0) {
+      const entries = await loadYoutubeEntries();
+      if (entries.length > 0) {
+        youtubeUrls = entries.map((e) => e.url);
+        youtubeTitles = entries.map((e) => e.title);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       video: {
@@ -123,7 +139,8 @@ export async function GET() {
         type: config.type,
         activeSource: config.activeSource,
         url: activeUploadInfo?.url || null,
-        youtubeUrls: config.youtubeUrls || [],
+        youtubeUrls: youtubeUrls || [],
+        youtubeTitles: youtubeTitles || [],
         currentUrlIndex: config.currentUrlIndex || 0,
         uploadedVideos,
         currentUploadIndex: config.currentUploadIndex || 0,
@@ -144,6 +161,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const youtubeUrl = formData.get('youtubeUrl') as string;
+    const youtubeTitle = formData.get('youtubeTitle') as string;
     const action = formData.get('action') as string;
     const source = formData.get('source') as 'upload' | 'youtube';
     const indexParam = formData.get('index') as string;
@@ -174,12 +192,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Source not specified' }, { status: 400 });
     }
 
-    // Handle next video in playlist
+    // Handle stop playback (set activeSource to null so TV stops playing)
+    if (action === 'stop') {
+      const config = await getVideoConfig();
+      config.activeSource = null;
+      await saveVideoConfig(config);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Video distoped di TV',
+        activeSource: null,
+      });
+    }
+
+    // Handle next video in playlist (works for both YouTube and uploaded)
     if (action === 'nextVideo') {
       const config = await getVideoConfig();
+
+      // YouTube playlist
       if (config.type === 'youtube' && config.youtubeUrls.length > 0) {
-        const newIndex = parseInt(indexParam) || 0;
-        config.currentUrlIndex = newIndex % config.youtubeUrls.length;
+        const parsed = parseInt(indexParam);
+        // If a valid index is given use it (wrapping), otherwise advance by one.
+        const newIndex =
+          Number.isInteger(parsed) && parsed >= 0
+            ? parsed % config.youtubeUrls.length
+            : (config.currentUrlIndex + 1) % config.youtubeUrls.length;
+        config.currentUrlIndex = newIndex;
         await saveVideoConfig(config);
         
         return NextResponse.json({
@@ -188,6 +226,31 @@ export async function POST(request: NextRequest) {
           url: config.youtubeUrls[config.currentUrlIndex],
         });
       }
+
+      // Uploaded videos
+      if (config.type === 'upload' && config.uploadedFiles?.length > 0) {
+        const parsed = parseInt(indexParam);
+        // If a valid index is given use it (wrapping), otherwise advance by one.
+        const nextIndex =
+          Number.isInteger(parsed) && parsed >= 0
+            ? parsed % config.uploadedFiles.length
+            : (config.currentUploadIndex + 1) % config.uploadedFiles.length;
+
+        config.currentUploadIndex = nextIndex;
+        config.uploadedFile = config.uploadedFiles[nextIndex];
+        // Endable upload source when "next" is used so the TV plays it.
+        if (!config.activeSource) {
+          config.activeSource = 'upload';
+        }
+        await saveVideoConfig(config);
+
+        return NextResponse.json({
+          success: true,
+          currentIndex: config.currentUploadIndex,
+          url: `/videos/${config.uploadedFiles[config.currentUploadIndex]}`,
+        });
+      }
+
       return NextResponse.json({ error: 'No playlist' }, { status: 400 });
     }
 
@@ -205,11 +268,15 @@ export async function POST(request: NextRequest) {
       
       // Add to playlist array
       const youtubeUrls = config.youtubeUrls || [];
+      const youtubeTitles = config.youtubeTitles || [];
       youtubeUrls.push(youtubeUrl);
+      // Judul video (fallback ke URL jika kosong)
+      youtubeTitles.push(youtubeTitle?.trim() || youtubeUrl);
 
       const newConfig: VideoConfig = {
         type: 'youtube',
         youtubeUrls,
+        youtubeTitles,
         currentUrlIndex: youtubeUrls.length - 1,
         uploadedFile: null,
         uploadedFiles: config.uploadedFiles || [],
@@ -219,12 +286,21 @@ export async function POST(request: NextRequest) {
 
       await saveVideoConfig(newConfig);
 
+      // Persist the playlist to the database.
+      await saveYoutubeEntries(
+        youtubeUrls.map((url: string, i: number) => ({
+          url,
+          title: youtubeTitles[i] || url,
+        })),
+      );
+
       return NextResponse.json({
         success: true,
         message: 'YouTube URL added to playlist',
         video: {
           type: 'youtube',
           youtubeUrls,
+          youtubeTitles,
           totalCount: youtubeUrls.length,
         },
       });
@@ -283,6 +359,7 @@ export async function POST(request: NextRequest) {
     const newConfig: VideoConfig = {
       type: 'upload',
       youtubeUrls: [],
+      youtubeTitles: [],
       currentUrlIndex: 0,
       uploadedFile: filename, // Keep for backward compatibility
       uploadedFiles,
@@ -340,11 +417,13 @@ export async function DELETE(request: NextRequest) {
 
       // Remove URL at index
       const newUrls = config.youtubeUrls.filter((_, i) => i !== index);
-      
+      const newTitles = (config.youtubeTitles || []).filter((_, i) => i !== index);
+
       // Update config
       const newConfig: VideoConfig = {
         ...config,
         youtubeUrls: newUrls,
+        youtubeTitles: newTitles,
         currentUrlIndex: newUrls.length === 0 ? 0 : Math.min(config.currentUrlIndex, newUrls.length - 1),
       };
 
@@ -355,6 +434,14 @@ export async function DELETE(request: NextRequest) {
       }
 
       await saveVideoConfig(newConfig);
+
+      // Persist the updated playlist to the database.
+      await saveYoutubeEntries(
+        newUrls.map((url: string, i: number) => ({
+          url,
+          title: newTitles[i] || url,
+        })),
+      );
 
       return NextResponse.json({
         success: true,
@@ -440,11 +527,15 @@ export async function DELETE(request: NextRequest) {
         type: null,
         activeSource: null,
         youtubeUrls: [],
+        youtubeTitles: [],
         currentUrlIndex: 0,
         uploadedFile: null,
         uploadedFiles: [],
         currentUploadIndex: 0,
       });
+
+      // Clear the YouTube playlist from the database.
+      await saveYoutubeEntries([]);
 
       return NextResponse.json({
         success: true,

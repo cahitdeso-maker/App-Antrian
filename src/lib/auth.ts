@@ -10,9 +10,10 @@ export const auth = betterAuth({
     schema,
     provider: 'mysql',
   }),
-  emailAndPassword: {
-    enabled: true,
-  },
+  // Login wordt volledig afgehandeld via de custom endpoints
+  // (/api/auth/custom-sign-in en custom-sign-up) die de password-hash direct
+  // in de tabel `user` bewaren. De `account` tabel van Better Auth wordt
+  // daarom niet gebruikt en is uit het schema verwijderd.
   plugins: [
     username(),
   ],
@@ -20,8 +21,6 @@ export const auth = betterAuth({
     modelName: 'user',
     fields: {
       name: 'name',
-      email: 'email',
-      emailVerified: 'emailVerified',
       image: 'image',
       createdAt: 'createdAt',
       updatedAt: 'updatedAt',
@@ -37,33 +36,6 @@ export const auth = betterAuth({
       updatedAt: 'updatedAt',
       ipAddress: 'ipAddress',
       userAgent: 'userAgent',
-    },
-  },
-  account: {
-    modelName: 'account',
-    fields: {
-      userId: 'userId',
-      accountId: 'accountId',
-      providerId: 'providerId',
-      accessToken: 'accessToken',
-      refreshToken: 'refreshToken',
-      idToken: 'idToken',
-      accessTokenExpiresAt: 'accessTokenExpiresAt',
-      refreshTokenExpiresAt: 'refreshTokenExpiresAt',
-      scope: 'scope',
-      password: 'password',
-      createdAt: 'createdAt',
-      updatedAt: 'updatedAt',
-    },
-  },
-  verification: {
-    modelName: 'verification',
-    fields: {
-      identifier: 'identifier',
-      value: 'value',
-      expiresAt: 'expiresAt',
-      createdAt: 'createdAt',
-      updatedAt: 'updatedAt',
     },
   },
   secret: process.env.BETTER_AUTH_SECRET || 'your-secret-key-change-this-in-production',

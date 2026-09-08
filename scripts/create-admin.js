@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: '../.env.local' });
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
@@ -22,18 +22,17 @@ async function createAdminUser() {
     const password = 'admin123';
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Delete existing admin and related data
+    // Delete existing admin
     console.log('🗑️  Cleaning up existing data...');
     await connection.query('DELETE FROM session WHERE userId IN (SELECT id FROM user WHERE username = ?)', [username]);
-    await connection.query('DELETE FROM account WHERE userId IN (SELECT id FROM user WHERE username = ?)', [username]);
     await connection.query('DELETE FROM user WHERE username = ?', [username]);
     console.log('   Done\n');
 
     // Create admin user
     console.log('📝 Creating admin user...');
     await connection.query(
-      'INSERT INTO user (id, username, password, role, name, emailVerified, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
-      [userId, username, hashedPassword, 'admin', 'Administrator', 1]
+      'INSERT INTO user (id, username, password, role, name, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+      [userId, username, hashedPassword, 'admin', 'Administrator']
     );
     console.log('   User created\n');
 

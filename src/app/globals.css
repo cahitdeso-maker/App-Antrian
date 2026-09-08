@@ -128,3 +128,55 @@
     @apply font-sans;
   }
 }
+
+/* Professional video-volume range slider (TV display).
+   Filled track is green, with a custom thumb for both WebKit & Firefox. */
+.tv-volume-slider {
+  --tv-slider-h: 6px;
+  height: var(--tv-slider-h);
+  background: linear-gradient(
+    to right,
+    rgb(34 197 94) 0%,
+    rgb(16 185 129) var(--fill, 50%),
+    rgb(255 255 255 / 25%) var(--fill, 50%),
+    rgb(255 255 255 / 25%) 100%
+  );
+}
+
+.tv-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid #22c55e;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.tv-volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.tv-volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid #22c55e;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.tv-volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}
+
+.tv-volume-slider::-moz-range-track {
+  height: var(--tv-slider-h);
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 25%);
+}

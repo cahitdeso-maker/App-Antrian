@@ -1,9 +1,20 @@
 {
   "type": "youtube",
   "youtubeUrls": [
-    "https://www.youtube.com/watch?v=827HSYJX5uw&list=RD827HSYJX5uw&start_radio=1&rv=75LBllz4n5A"
+    "https://www.youtube.com/watch?v=sxeAtsaHoZc",
+    "https://www.youtube.com/watch?v=VGsj7RIqVzw",
+    "https://www.youtube.com/watch?v=sxeAtsaHoZc&t=1s",
+    "https://www.youtube.com/watch?v=5r6OsreqOEg"
   ],
-  "currentUrlIndex": 0,
+  "youtubeTitles": [
+    "PROFIL RUMAH SAKIT PKU MUHAMMADIYAH GOMBONG",
+    "LAYANAN KANKER TERPADU",
+    "Tata Cara Download & Registrasi Aplikasi Mobile JKN",
+    "ALUR PELAYANAN RADIOTERAPI"
+  ],
+  "currentUrlIndex": 3,
   "uploadedFile": null,
+  "uploadedFiles": [],
+  "currentUploadIndex": 0,
   "activeSource": "youtube"
 }

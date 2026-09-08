@@ -6,14 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, UserRound, Lock, Mail, UserPlus, LogIn } from 'lucide-react';
-import { authClient } from '@/lib/auth-client';
+import { AlertCircle, UserRound, Lock, UserPlus, LogIn } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,30 +26,28 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // Sign Up flow
-        console.log('Attempting sign up:', { name, email, username });
+        // Sign Up flow — menggunakan endpoint custom zodat ID user di database
+        // sederhana ("01-2026") bukan UUID panjang.
+        console.log('Attempting sign up:', { name, username });
 
-        const result = await authClient.signUp.email({
-          name,
-          email,
-          username,
-          password,
+        const response = await fetch('/api/auth/custom-sign-up', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, username, password }),
         });
 
-        console.log('Sign up result:', JSON.stringify(result, null, 2));
+        const data = await response.json();
+        console.log('Sign up response:', JSON.stringify(data, null, 2));
 
-        if (result.error) {
-          throw new Error(result.error.message || 'Registrasi gagal');
+        if (!response.ok) {
+          throw new Error(data.message || 'Registrasi gagal');
         }
 
-        if (result.data) {
-          setSuccess('Registrasi berhasil! Silakan login.');
-          setIsSignUp(false);
-          setName('');
-          setEmail('');
-          setUsername('');
-          setPassword('');
-        }
+        setSuccess(data.message || 'Registrasi berhasil! Silakan login.');
+        setIsSignUp(false);
+        setName('');
+        setUsername('');
+        setPassword('');
       } else {
         // Sign In flow - use custom endpoint
         console.log('Attempting login for:', username);
@@ -145,26 +141,6 @@ export default function LoginPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Nama lengkap"
-                      className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 pl-10 focus:border-blue-500 focus:ring-blue-500/20 transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300 text-sm font-medium">
-                    Email
-                  </Label>
-                  <div className="relative group">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@example.com"
                       className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 pl-10 focus:border-blue-500 focus:ring-blue-500/20 transition-all"
                       required
                     />
