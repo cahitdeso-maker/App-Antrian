@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 // berdasarkan session cookie yang dipakai oleh custom login.
 export async function GET(request: NextRequest) {
   const sessionToken = request.cookies.get(
-    'better-auth.session_token',
+    'antrian.session_token',
   )?.value;
 
   if (!sessionToken) {

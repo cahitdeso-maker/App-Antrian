@@ -1,14 +1,11 @@
 import { mysqlTable, varchar, int, mysqlEnum, boolean, datetime, timestamp } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
-// Users table - Better Auth compatible
+// Users table - custom login
 export const users = mysqlTable('user', {
   id: varchar('id', { length: 255 }).primaryKey(),
   username: varchar('username', { length: 255 }).notNull().unique(),
-  displayUsername: varchar('displayUsername', { length: 255 }),
   password: varchar('password', { length: 255 }),
-  email: varchar('email', { length: 255 }),
-  emailVerified: boolean('emailVerified').notNull().default(false),
   role: varchar('role', { length: 50 }).notNull().default('admin'),
   name: varchar('name', { length: 255 }),
   image: varchar('image', { length: 500 }),
@@ -16,7 +13,7 @@ export const users = mysqlTable('user', {
   updatedAt: timestamp('updatedAt').defaultNow().onUpdateNow(),
 });
 
-// Sessions table for Better Auth
+// Sessions table - custom login
 export const sessions = mysqlTable('session', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('userId', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),

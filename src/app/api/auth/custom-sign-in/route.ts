@@ -94,8 +94,7 @@ export async function POST(request: NextRequest) {
 
     // Create session
     const sessionToken = randomUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
 
     await db.insert(sessions).values({
       id: sessionToken,
@@ -122,7 +121,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    response.cookies.set('better-auth.session_token', sessionToken, {
+    response.cookies.set('antrian.session_token', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

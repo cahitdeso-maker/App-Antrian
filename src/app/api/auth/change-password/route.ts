@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 // ditulis alleen naar de tabel `user`.
 export async function POST(request: NextRequest) {
   const sessionToken = request.cookies.get(
-    'better-auth.session_token',
+    'antrian.session_token',
   )?.value;
 
   if (!sessionToken) {

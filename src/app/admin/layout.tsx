@@ -11,7 +11,7 @@ export default async function AdminLayout({
 }) {
   try {
     const cookieStore = await cookies();
-    const sessionToken = cookieStore.get("better-auth.session_token")?.value;
+    const sessionToken = cookieStore.get("antrian.session_token")?.value;
 
     if (!sessionToken) {
       console.log("[admin-layout] No session token found");
