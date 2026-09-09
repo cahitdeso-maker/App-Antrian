@@ -5,7 +5,10 @@ import { sql } from 'drizzle-orm';
 export const users = mysqlTable('user', {
   id: varchar('id', { length: 255 }).primaryKey(),
   username: varchar('username', { length: 255 }).notNull().unique(),
+  displayUsername: varchar('displayUsername', { length: 255 }),
   password: varchar('password', { length: 255 }),
+  email: varchar('email', { length: 255 }),
+  emailVerified: boolean('emailVerified').notNull().default(false),
   role: varchar('role', { length: 50 }).notNull().default('admin'),
   name: varchar('name', { length: 255 }),
   image: varchar('image', { length: 500 }),

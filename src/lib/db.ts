@@ -13,10 +13,10 @@ export const getDb = async () => {
   try {
     if (!mysqlConnection) {
       mysqlConnection = await mysql.createConnection({
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '3307'),
+        host: process.env.DB_HOST || '192.168.12.85',
+        port: parseInt(process.env.DB_PORT || '3306'),
         user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || 'Mahmudd',
+        password: process.env.DB_PASSWORD || 'pkugombong21',
         database: process.env.DB_NAME || 'db_antrian',
         connectTimeout: 5000,
       });
