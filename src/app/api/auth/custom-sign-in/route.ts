@@ -121,9 +121,16 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
+    // Bepaal `secure` op basis van de werkelijke verbinding. Op een HTTP-verbinding
+    // (bv. LAN-IP / reverse proxy zonder TLS) moet `secure` false zijn, anders slaat
+    // de browser de cookie niet op en mislukt de login. Via HTTPS blijft het veilig.
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const firstProto = forwardedProto ? forwardedProto.split(',')[0].trim() : '';
+    const isSecure = firstProto === 'https' || request.nextUrl.protocol === 'https:';
+
     response.cookies.set('antrian.session_token', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days
