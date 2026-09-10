@@ -1,19 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, UserRound, Lock, UserPlus, LogIn } from 'lucide-react';
+import { AlertCircle, UserRound, Lock, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -25,49 +22,24 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        // Sign Up flow — menggunakan endpoint custom zodat ID user di database
-        // sederhana ("01-2026") bukan UUID panjang.
-        console.log('Attempting sign up:', { name, username });
+      // Sign In flow - de gebruikersnaam en wachtwoord tellen alleen via custom endpoint
+      console.log('Attempting login for:', username);
 
-        const response = await fetch('/api/auth/custom-sign-up', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, username, password }),
-        });
+      const response = await fetch('/api/auth/custom-sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
 
-        const data = await response.json();
-        console.log('Sign up response:', JSON.stringify(data, null, 2));
+      const data = await response.json();
+      console.log('Login response:', data);
 
-        if (!response.ok) {
-          throw new Error(data.message || 'Registrasi gagal');
-        }
-
-        setSuccess(data.message || 'Registrasi berhasil! Silakan login.');
-        setIsSignUp(false);
-        setName('');
-        setUsername('');
-        setPassword('');
-      } else {
-        // Sign In flow - use custom endpoint
-        console.log('Attempting login for:', username);
-
-        const response = await fetch('/api/auth/custom-sign-in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
-        });
-
-        const data = await response.json();
-        console.log('Login response:', data);
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Login gagal');
-        }
-
-        console.log('Login successful, redirecting to /admin');
-        window.location.href = '/admin';
+      if (!response.ok) {
+        throw new Error(data.message || 'Login gagal');
       }
+
+      console.log('Login successful, redirecting to /admin');
+      window.location.href = '/admin';
     } catch (err: any) {
       console.error('Auth error:', err);
       setError(err.message || 'Terjadi kesalahan. Silakan coba lagi.');
@@ -96,14 +68,18 @@ export default function LoginPage() {
         <div className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 mb-4 shadow-lg shadow-blue-500/25">
-              {isSignUp ? <UserPlus className="w-8 h-8 text-white" /> : <UserRound className="w-8 h-8 text-white" />}
-            </div>
+          <div className="inline-flex items-center justify-center w-12 h-12 mb-3">
+    <img
+      src="/img/sistem.png"
+      alt="Sistem"
+      className="w-12 h-12 object-contain"
+    />
+  </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
-              {isSignUp ? 'Buat Akun Admin' : 'Admin Login'}
+              Selamat Datang
             </h1>
             <p className="text-slate-400 mt-2 text-sm">
-              {isSignUp ? 'Daftar sebagai admin baru' : 'Masuk ke dashboard admin'}
+              Sistem Antrian RS PKU Muhammadiyah Gombong
             </p>
           </div>
 
@@ -125,30 +101,6 @@ export default function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-slate-300 text-sm font-medium">
-                    Nama Lengkap
-                  </Label>
-                  <div className="relative group">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors">
-                      <UserRound className="w-4 h-4" />
-                    </div>
-                    <Input
-                      id="name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Nama lengkap"
-                      className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 pl-10 focus:border-blue-500 focus:ring-blue-500/20 transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="username" className="text-slate-300 text-sm font-medium">
                 Username
@@ -180,14 +132,26 @@ export default function LoginPage() {
                 </div>
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan password"
-                  className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 pl-10 focus:border-purple-500 focus:ring-purple-500/20 transition-all"
+                  className="bg-slate-800/50 border-slate-700 text-slate-100 placeholder:text-slate-500 pl-10 pr-10 focus:border-purple-500 focus:ring-purple-500/20 transition-all"
                   required
-                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Barikari password' : 'Tampil password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -204,43 +168,16 @@ export default function LoginPage() {
                   </svg>
                   Memproses...
                 </div>
-              ) : isSignUp ? (
-                'Daftar'
               ) : (
                 'Masuk'
               )}
             </Button>
           </form>
 
-          {/* Toggle */}
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-                setSuccess('');
-              }}
-              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              {isSignUp ? (
-                <>
-                  <LogIn className="w-4 h-4 inline mr-1" />
-                  Sudah punya akun? Login
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4 inline mr-1" />
-                  Belum punya akun? Daftar
-                </>
-              )}
-            </button>
-          </div>
-
           {/* Footer */}
           <div className="mt-4 text-center">
             <p className="text-xs text-slate-500">
-              Sistem Antrian Digital &copy; {new Date().getFullYear()}
+              IT Pku Muhammadiyah Gombong &copy; {new Date().getFullYear()}
             </p>
           </div>
         </div>

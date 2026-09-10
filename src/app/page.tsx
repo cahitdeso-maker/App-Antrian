@@ -6,15 +6,25 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="container mx-auto px-4 py-6">
-          <h1 className="text-4xl font-bold text-primary">
-            Sistem Antrian Pendaftaran Poli Klinik
-          </h1>
-          <p className="text-lg text-muted-foreground mt-2">
-            Solusi terpadu untuk manajemen antrian yang efisien
-          </p>
-        </div>
+     <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-indigo-500/20 px-6 py-4 shrink-0 shadow-xl">
+        <div className="max-w-[1920px] mx-auto flex items-center justify-between">
+          {/* SISI KIRI: Logo & Nama RS */}
+          <div className="flex items-center gap-3">
+            <img
+              src="/img/sistem.png"
+              alt="Logo RS PKU"
+              className="w-15 h-15 object-contain"
+            />
+            <div>
+              <h1 className="text-white font-extrabold text-2xl md:text-3xl tracking-wide uppercase">
+                RS PKU Muhammadiyah Gombong
+              </h1>
+              <p className="text-slate-400 text-xs md:text-sm font-medium tracking-wider">
+                Sistem Display Antrian Pelayanan
+              </p>
+            </div>
+          </div>
+          </div>
       </header>
 
       {/* Main Content */}
@@ -29,9 +39,6 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground mb-4">
-                Pasien memilih jadwal (Pagi/Siang), lalu tipe (BPJS/Umum) untuk mendapatkan nomor antrian
-              </p>
               <Link href="/kiosk">
                 <Button className="w-full" size="lg">
                   Buka Kiosk
@@ -49,9 +56,6 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground mb-4">
-                Petugas admin dapat memanggil, mengulang, atau melewati antrian pasien
-              </p>
               <Link href="/login">
                 <Button className="w-full" size="lg" variant="outline">
                   Login Admin
@@ -69,9 +73,6 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground mb-4">
-                Menampilkan nomor antrian yang sedang dipanggil dengan notifikasi suara
-              </p>
               <Link href="/tv">
                 <Button className="w-full" size="lg" variant="secondary">
                   Buka Layar TV
@@ -79,46 +80,15 @@ export default function Home() {
               </Link>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Features Section */}
-        <div className="mt-16 max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-8">Fitur Utama</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-xl font-semibold mb-2">✅ Sistem Tiket Mandiri</h3>
-              <p className="text-muted-foreground">
-                Pasien dapat mengambil nomor antrian secara mandiri melalui kiosk
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-xl font-semibold mb-2">✅ Pengelompokan Antrian</h3>
-              <p className="text-muted-foreground">
-                Membedakan pasien BPJS/Umum dan jadwal Pagi/Siang
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-xl font-semibold mb-2">✅ Auto-Reset Harian</h3>
-              <p className="text-muted-foreground">
-                Nomor antrian otomatis reset setiap pergantian hari/shift
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-xl font-semibold mb-2">✅ Notifikasi Real-time</h3>
-              <p className="text-muted-foreground">
-                Layar TV menampilkan antrian secara real-time dengan suara ting-tong
-              </p>
-            </div>
-          </div>
-        </div>
+        </div>        
       </main>
 
       {/* Footer */}
-      <footer className="bg-white mt-16 py-8">
-        <div className="container mx-auto px-4 text-center text-muted-foreground">
-          <p>© 2026 Sistem Antrian Poli Klinik. All rights reserved.</p>
-        </div>
-      </footer>
+      <div className="mt-4 text-center">
+            <p className="text-xs text-slate-500">
+              IT Pku Muhammadiyah Gombong &copy; {new Date().getFullYear()}
+            </p>
+          </div>
     </div>
   );
 }
