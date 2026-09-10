@@ -218,6 +218,10 @@ export async function POST(request: NextRequest) {
             ? parsed % config.youtubeUrls.length
             : (config.currentUrlIndex + 1) % config.youtubeUrls.length;
         config.currentUrlIndex = newIndex;
+        // Ensure the YouTube source is active so the TV plays it (mirrors the
+        // uploaded-video branch below). Without this the config stays with
+        // activeSource=null and the TV has no source to play.
+        config.activeSource = 'youtube';
         await saveVideoConfig(config);
         
         return NextResponse.json({

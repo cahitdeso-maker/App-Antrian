@@ -516,6 +516,31 @@ export default function TVDisplay() {
     };
   }, []);
 
+  // Cleanup op unmount: maak enige oorblywende timer skoon, cancel lopende
+  // speech (net hier — cleanup is die korrekte plek), en leeg die queue sodat
+  // geen announcement na unmount gemaak word nie.
+  useEffect(() => {
+    return () => {
+      // 1) Cancel enige oorblywende retry/pending timer.
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      // 2) Cancel lopende spraak (cleanup/unmount is die enigste gepaste plek).
+      try {
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      } catch (e) {
+        /* ignore */
+      }
+      // 3) Maak die queue leeg.
+      announceQueueRef.current = [];
+      lastPendingAnnounceRef.current = null;
+      speakingRef.current = false;
+    };
+  }, []);
+
   // Keep the uploaded `<video>` element in sync with the volume slider/mute.
   useEffect(() => {
     if (uploadedVideoRef.current) {
@@ -531,12 +556,9 @@ export default function TVDisplay() {
 
     // Use Web Speech API for text-to-speech
     if ("speechSynthesis" in window) {
-      // Only cancel if there is actually speech running or queued. Calling
-      // cancel() on every announcement — even when nothing is playing —
-      // triggers a spurious "canceled"/empty error on the utterance.
-      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-        window.speechSynthesis.cancel();
-      }
+      // NOTE: Ons roep NIE `cancel()` hier nie — dit kan 'n lopende announcement
+      // onderbreek. Die queue/lock verseker dat net een op 'n tyd praat, so `cancel`
+      // is nie nodig nie en word net gedoen tydens cleanup/unmount.
 
       // Create announcement text
       const loketName = loket.replace("_", " ");
@@ -571,32 +593,41 @@ export default function TVDisplay() {
         const code = typeof event?.error === "string" ? event.error : "";
         if (!code || code === "canceled" || code === "interrupted") {
           // Release the slot so the next queued call can proceed — onend may not
-          // fire on cancellation, so release here explicitly.oot
+          // fire on cancellation, so release here explicitly.
+          console.warn("[TV][AUDIO] WebSpeech canceled/interrupted (benign), slot released.");
           speakingRef.current = false;
           processNextAnnouncementRef.current?.();
           return;
         }
 
-        // 'not-allowed' = browser blocked speech until a user gesture.
-        // For an unattended display, auto-retry instead of showing a button.
+        // Alle foutkodes word eksplisiet gelog so die werklike rede altyd sigbaar is.
+        console.error(`[TV][AUDIO] WebSpeech ERROR code = "${code}" (queue=${queueNumber}, loket=${loket})`);
+
         if (code === "not-allowed") {
-          console.warn(
-            "[TV] Speech blocked by autoplay policy (not-allowed). Auto-retrying. If this persists, run Chrome with --autoplay-policy=no-user-gesture-required.",
+          // Browser vereis 'n user gesture of autoplay-toestemming. Geen JavaScript
+          // kan dit omseil nie. Ons stoor die announcement (sodat dit later, wanneer
+          // die browser eenmaal toelaat, kan speel) en log die oorsaak duidelik.
+          // Belangrik: GEEN oneindige retry-loop elke 2s nie — dit spook net en los
+          // nie die beleid op nie. Die pending announcement word geproses wanneer
+          // `unlockAudio()` (eenmalige klik of Chrome met
+          // --autoplay-policy=no-user-gesture-required) `onstart` laat vuur.
+          console.error(
+            "[TV][AUDIO] WebSpeech BLOCKED: browser requires user gesture/autoplay permission. " +
+            "Run Chrome met --autoplay-policy=no-user-gesture-required om dit sonder klik op te los.",
           );
+          setSoundBlocked(true);
           lastPendingAnnounceRef.current = { queueNumber, loket };
-          scheduleRetry();
-          // Release the slot too so the queue keeps advancing.
-
+          // Maak die slot los sodat die volgende queue-item kan aanmerk (geen vashaak).
           speakingRef.current = false;
           processNextAnnouncementRef.current?.();
           return;
         }
 
-        // DIAGNOSTICS: log every other distinct error code so the root cause is
-        // visible (e.g. 'audio-capture', 'synthesis-failed', etc.).
-        console.warn("[TV] Speech error code:", code || "(no code / empty {})");
         if (code === "synthesis-failed") {
-          console.error("[TV] Speech error:", code);
+          console.error("[TV][AUDIO] WebSpeech ERROR: synthesis-failed (stem/toestel probleem)");
+        }
+        if (code === "audio-capture") {
+          console.error("[TV][AUDIO] WebSpeech ERROR: audio-capture (geen mikrofoon/toestel beskikbaar)");
         }
       };
 
@@ -638,11 +669,12 @@ export default function TVDisplay() {
     (queueNumber: string, loket: string) => {
       if (!queueNumber || !loket) return;
       console.log("[TV] Announcing queue:", queueNumber, "at", loket);
-      playChime();
+      // NOTE: chime wordt NIET hier direct gespeel — het moet deel wees van die
+      // audio-proses (queue → chime → speech → selesai → volgende). Dit word nou
+      // in die queue-drainer gedoen.
 
       // Enqueue so calls from multiple loket play bergantian: the next one waits
       // until the ongoing announcement finishes instead of cutting it off.
-
       const alreadyQueued = announceQueueRef.current.some(
         (q) => q.queueNumber === queueNumber && q.loket === loket,
       );
@@ -651,7 +683,7 @@ export default function TVDisplay() {
       }
       processNextAnnouncementRef.current?.();
     },
-    [speakQueue, playChime],
+    [],
   );
   // Drain the queue one-by-one: only one announcement speaks at a time; the
   // next starts when the current one finishes (see speakQueue done()).
@@ -660,8 +692,11 @@ export default function TVDisplay() {
     const next = announceQueueRef.current.shift();
     if (!next) return;
     speakingRef.current = true;
+    // Chime maak deel uit van die audio-proses: speel dit eers, dan die spraak.
+    // Nie apart nie — sodat dit nooit oorvleuel met 'n ander announcement.
+    playChime();
     setTimeout(() => speakQueue(next.queueNumber, next.loket), 120);
-  }, [speakQueue]);
+  }, [speakQueue, playChime]);
 
   processNextAnnouncementRef.current = processAnnouncementQueue;
 
@@ -691,31 +726,9 @@ export default function TVDisplay() {
     }
   }, [speakQueue]);
 
-  // Auto-retry a blocked announcement. Keeps retrying every 2s while there is
-  // a pending announcement; stops as soon as speech actually starts (see
-  // utterance.onstart). Combined with Chrome's
-  // --autoplay-policy=no-user-gesture-required, speech becomes allowed and the
-  // next retry succeeds automatically — no click needed.
-  const scheduleRetry = useCallback(() => {
-    if (retryTimerRef.current) return; // already retrying
-
-    const tick = () => {
-      const pending = lastPendingAnnounceRef.current;
-      if (!pending) {
-        retryTimerRef.current = null;
-        return;
-      }
-      retryTimerRef.current = setTimeout(() => {
-        const current = lastPendingAnnounceRef.current;
-        if (current) {
-          speakQueue(current.queueNumber, current.loket);
-        }
-        tick(); // keep retrying until one succeeds
-      }, 2000);
-    };
-
-    tick();
-  }, [speakQueue]);
+  // Auto-retry is VERWYDER: as die browser "not-allowed" gee, wag ons net tot
+  // `unlockAudio()` (eenmalige klik of Chrome met --autoplay-policy flag) die
+  // pending announcement laat speel. Geen oneindige retry-loop elke 2s nie.
 
   // Fetch queue data for TV display
   const fetchQueues = useCallback(async () => {
@@ -900,6 +913,20 @@ export default function TVDisplay() {
     } catch (e) {
       console.warn("[TV] Failed to init chime audio:", e);
     }
+
+    // STATUSOPSOMMING by opstart — een duidelike reël wat die operateur vertel of
+    // suid-outomaties moontlik is of dat Chrome die flag NIE het nie.
+    // Wanneer `soundBlocked == true` beteken dit die probe (hierbo) het ontdek dat
+    // Chrome autoplay-policy outomaties suid blok. Dit is die kern-vonnis van hierdie
+    // diagnose: SONDER die Chrome-flaggie kan GEEN JS dit oortree.
+    console.warn(
+      "[TV][AUDIO] OPSOMMING opstart: speechSynthesis=" + ("speechSynthesis" in window) +
+      ", chime=/sounds/ding.wav, soundBlocked(op detectie)=" + soundBlocked,
+    );
+    console.warn(
+      "[TV][AUDIO] Oplossing: begin die TV-wyser met --autoplay-policy=no-user-gesture-required. " +
+      "Sien die Chrome-opdrag in die leesmij. Dan is soundBlocked=false en klink alles outomaties sonder klik.",
+    );
 
     unlockAudio();
   }, [unlockAudio]);
