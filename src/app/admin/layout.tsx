@@ -4,6 +4,12 @@ import { sessions, users } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 
+// Server-functie die een NEXT_REDIRECT naar /login gooit. Deze wordt NIET in een
+// try/catch gevangen, zodat Next.js de redirect correct kan afhandelen.
+function gotoLogin(): never {
+  redirect("/login");
+}
+
 export default async function AdminLayout({
   children,
 }: {
@@ -14,17 +20,19 @@ export default async function AdminLayout({
     const sessionToken = cookieStore.get("antrian.session_token")?.value;
 
     if (!sessionToken) {
-      console.log("[admin-layout] No session token found");
-      redirect("/login");
+      console.error("[admin-layout] STEP=NO_TOKEN (cookie antrian.session_token ontbreekt)");
+      return gotoLogin();
     }
+    console.log("[admin-layout] STEP=TOKEN_OK len=" + sessionToken.length);
 
     const db = await getDb();
     if (!db) {
-      console.error("[admin-layout] Database not available");
-      redirect("/login");
+      console.error("[admin-layout] STEP=NO_DB (geen database verbinding)");
+      return gotoLogin();
     }
 
     // Find session by token
+    console.log("[admin-layout] STEP=QUERY token=" + sessionToken);
     const session = await db
       .select({
         id: sessions.id,
@@ -38,25 +46,30 @@ export default async function AdminLayout({
       .limit(1);
 
     if (session.length === 0) {
-      console.log("[admin-layout] Session not found in database");
-      redirect("/login");
+      console.error("[admin-layout] STEP=NO_SESSION: token=" + sessionToken);
+      return gotoLogin();
     }
 
     const foundSession = session[0];
+    console.log(
+      "[admin-layout] STEP=SESSION_FOUND expiresAt=" + foundSession.expiresAt + " now=" + new Date().toISOString()
+    );
 
     // Check if session is expired
-    if (new Date(foundSession.expiresAt) < new Date()) {
-      console.log("[admin-layout] Session expired");
-      redirect("/login");
+    if (new Date(foundSession.expiresAt).getTime() < Date.now()) {
+      console.error("[admin-layout] STEP=EXPIRED: expiresAt=" + foundSession.expiresAt);
+      return gotoLogin();
     }
 
-    console.log(
-      "[admin-layout] Valid session for user:",
-      foundSession.user.username,
-    );
+    console.log("[admin-layout] STEP=VALID user=" + foundSession.user.username);
   } catch (error) {
-    console.error("[admin-layout] Session check error:", error);
-    redirect("/login");
+    // errors anders dan NEXT_REDIRECT doorgeven voor debugging
+    const err = error as Error & { digest?: string };
+    if (err.digest && err.digest.startsWith("NEXT_REDIRECT")) {
+      throw error;
+    }
+    console.error("[admin-layout] STEP=THREW:", error);
+    return gotoLogin();
   }
 
   return <>{children}</>;
