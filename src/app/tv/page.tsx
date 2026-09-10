@@ -1065,7 +1065,7 @@ export default function TVDisplay() {
         {/* Video + Queue */}
         <div className="grid grid-cols-2 gap-4 w-full items-start">
           {/* Left: Video Area */}
-          <div className="relative bg-black shadow-2xl overflow-hidden rounded-lg aspect-video w-full">
+          <div className="relative bg-black shadow-2xl overflow-hidden rounded-lg w-full h-full min-h-[300px] flex items-center justify-center">
             {videoType === "upload" && videoUrl ? (
               // Uploaded video
               <div
@@ -1322,20 +1322,6 @@ export default function TVDisplay() {
           </div>
         </div>
       </main>
-
-      {/* {/* Diagnostic banner — ONLY shown while Chrome autoplay policy is blocking
-          audio (i.e. no user gesture / Chrome started WITHOUT the flag). This helps
-          the operator confirm the root cause: with the flag set, this never appears. */}
-      {/* {soundBlocked && (
-        <div className="fixed bottom-4 left-0 right-0 z-50 flex justify-center pointer-events-none">
-          <div className="bg-red-600/95 text-white text-lg font-bold px-8 py-3 rounded-xl shadow-2xl border-2 border-red-300 max-w-3xl text-center">
-            🔇 Suara diblokir browser. Jalankan TV dengan Chrome:
-            <code className="bg-black/40 px-2 py-1 rounded ml-1 font-mono text-base">
-              --autoplay-policy=no-user-gesture-required
-            </code>
-          </div>
-        </div>
-      )} */}
     </div>
   );
 }
