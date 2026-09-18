@@ -43,6 +43,11 @@ export async function GET() {
       // so the display always follows the server clock, regardless of the
       // device's own (possibly wrong) local time.
       serverTime: new Date().toISOString(),
+      // The server's IANA time zone (e.g. "Asia/Jakarta" for WIB, or "UTC").
+      // The TV renders its wall-clock using THIS zone so the displayed time
+      // always equals the server's local time — even if the TV device itself
+      // is configured with a different time zone.
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       queues: {
         current: currentQueue,
         lokets: loketData,

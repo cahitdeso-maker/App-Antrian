@@ -47,6 +47,30 @@ export default function TVDisplay() {
     () => new Date(Date.now() + serverClockOffsetRef.current),
     [],
   );
+  // IANA time zone reported by the server (e.g. "Asia/Jakarta" for WIB or
+  // "UTC"). The displayed clock is formatted in THIS zone — not the device's —
+  // so the wall-clock always matches the server even if the TV/browser is set
+  // to a different time zone. Refreshed on each /api/tv/queues poll.
+  const serverTimeZoneRef = useRef<string>("");
+  // Format the (already server-synced) Instant into the server's wall-clock.
+  // Falls back to the device's own zone until the server reports one.
+  const formatClockTime = (date: Date | null): string => {
+    if (!date) return "";
+    const options: Intl.DateTimeFormatOptions = { hour12: false };
+    if (serverTimeZoneRef.current) options.timeZone = serverTimeZoneRef.current;
+    return date.toLocaleTimeString("id-ID", options).replace(/\./g, ":");
+  };
+  const formatClockDate = (date: Date | null): string => {
+    if (!date) return "";
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    };
+    if (serverTimeZoneRef.current) options.timeZone = serverTimeZoneRef.current;
+    return date.toLocaleDateString("id-ID", options);
+  };
   // Reference to the local chime sound used as an HTML5 audio fallback path.
   const chimeAudioRef = useRef<HTMLAudioElement | null>(null);
   // True while Chrome's autoplay policy is blocking audio (no user gesture yet).
@@ -758,6 +782,12 @@ export default function TVDisplay() {
             serverClockOffsetRef.current = serverMs - Date.now();
           }
         }
+        // Capture the server's IANA time zone so the clock renders in the same
+        // wall-clock zone as the server (see formatClockTime/Date below). This
+        // guarantees the display matches the server even if the device differs.
+        if (typeof data.timeZone === "string" && data.timeZone) {
+          serverTimeZoneRef.current = data.timeZone;
+        }
 
         // Reset tampilan setelah melewati jam 00:00: buang antrian dari hari
         // sebelumnya sehingga nomor yang tampil otomatis mulai dari awal lagi.
@@ -1104,17 +1134,10 @@ export default function TVDisplay() {
           {/* SISI KANAN: Tanggal & Jam Digital */}
           <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 md:px-5 py-1.5 md:py-2 text-right shadow-inner shrink-0">
             <div className="text-slate-300 font-medium text-[10px] md:text-xs truncate">
-              {currentDate?.toLocaleDateString("id-ID", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }) || "Loading..."}
+              {formatClockDate(currentDate) || "Loading..."}
             </div>
             <div className="text-emerald-400 font-black text-lg md:text-2xl xl:text-3xl tracking-widest font-mono drop-shadow">
-              {currentTime
-                ?.toLocaleTimeString("id-ID", { hour12: false })
-                .replace(/\./g, ":") || "00:00:00"}
+              {formatClockTime(currentTime) || "00:00:00"}
             </div>
           </div>
         </div>
