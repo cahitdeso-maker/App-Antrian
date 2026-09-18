@@ -7,8 +7,11 @@ import { inMemoryStorage } from './storage';
 // Global counter untuk queue numbers (persist across requests in memory)
 const queueCounters = new Map<string, number>();
 
-// Initialize counters from database on module load
-const initializeCounters = async () => {
+// Initialize counters from database on module load. Declared as a standard
+// function declaration (hoisted) because it is invoked at module-load time
+// (below) — well before the const arrow functions ensureDb/isDatabaseAvailable
+// that it calls get defined. This avoids a ReferenceError during Next.js build.
+async function initializeCounters() {
   try {
     const dbAvailable = await isDatabaseAvailable();
     if (!dbAvailable) {
@@ -48,7 +51,7 @@ const initializeCounters = async () => {
   } catch (error) {
     console.warn('[Queue] Failed to initialize counters:', error);
   }
-};
+}
 
 // Run initialization
 initializeCounters();
@@ -67,24 +70,25 @@ export const getCurrentShift = (): 'PAGI' | 'SIANG' => {
   return hour < 12 ? 'PAGI' : 'SIANG';
 };
 
-// Ensure db is available
-const ensureDb = async () => {
+// Ensure db is available. Standard function declaration (hoisted) so it is
+// available immediately when initializeCounters() runs at module load.
+async function ensureDb() {
   const db = await getDb();
   if (!db) {
     throw new Error('Database connection not available');
   }
   return db;
-};
+}
 
-// Check if database is available
-export const isDatabaseAvailable = async (): Promise<boolean> => {
+// Check if database is available. Standard function declaration (hoisted).
+export async function isDatabaseAvailable(): Promise<boolean> {
   try {
     const db = await getDb();
     return db !== null;
   } catch {
     return false;
   }
-};
+}
 
 // Generate next queue number
 const generationLocks = new Map<string, boolean>();
