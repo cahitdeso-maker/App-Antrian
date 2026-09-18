@@ -39,6 +39,10 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      // The hospital SERVER's current time (ISO). The TV clock syncs to this
+      // so the display always follows the server clock, regardless of the
+      // device's own (possibly wrong) local time.
+      serverTime: new Date().toISOString(),
       queues: {
         current: currentQueue,
         lokets: loketData,

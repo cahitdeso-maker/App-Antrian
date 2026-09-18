@@ -35,6 +35,18 @@ export default function TVDisplay() {
   // of the same queue number is announced again (key includes updatedAt).
   const lastAnnouncedRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Captured offset (ms) between the SERVER clock and this device's local
+  // clock (serverMinusLocal = serverTime - Date.now()). The TV jam is driven
+  // by the server time returned by /api/tv/queues so it always follows the
+  // hospital server even if the display device's own clock is wrong.
+  const serverClockOffsetRef = useRef<number>(0);
+  // Build a Date for the server-adjusted "now" (local Date.now + offset).
+  // Reads the mutable ref, so it always uses the latest synced offset even
+  // from within the (stale) polling closure.
+  const getServerNow = useCallback(
+    () => new Date(Date.now() + serverClockOffsetRef.current),
+    [],
+  );
   // Reference to the local chime sound used as an HTML5 audio fallback path.
   const chimeAudioRef = useRef<HTMLAudioElement | null>(null);
   // True while Chrome's autoplay policy is blocking audio (no user gesture yet).
@@ -737,9 +749,21 @@ export default function TVDisplay() {
       if (response.ok) {
         const data = await response.json();
 
+        // Sync the clock with the hospital SERVER time. The response includes
+        // serverTime (ISO). Dusting the delta between server and this device
+        // lets the ticking jam follow the server clock exactly.
+        if (data.serverTime) {
+          const serverMs = new Date(data.serverTime).getTime();
+          if (!Number.isNaN(serverMs)) {
+            serverClockOffsetRef.current = serverMs - Date.now();
+          }
+        }
+
         // Reset tampilan setelah melewati jam 00:00: buang antrian dari hari
         // sebelumnya sehingga nomor yang tampil otomatis mulai dari awal lagi.
-        const today = new Date();
+        // Pemeriksaan "hari ini" dipakai dari jam SERVER (getServerNow) supaya
+        // reset 00:00 tetap sinkron walau jam device setempat berbeda.
+        const today = getServerNow();
         today.setHours(0, 0, 0, 0);
         const isToday = (q: any) => {
           const created = new Date(q.createdAt || q.created_at || 0);
@@ -791,7 +815,7 @@ export default function TVDisplay() {
     } catch (error) {
       console.error("Error fetching queue data:", error);
     }
-  }, [announceQueue]);
+  }, [announceQueue, getServerNow]);
 
   // Poll for playlist changes, queue updates, and update clock
   useEffect(() => {
@@ -808,14 +832,19 @@ export default function TVDisplay() {
       fetchPlaylist();
     }, 5000);
 
-    // Initialize clock
-    setCurrentTime(new Date());
-    setCurrentDate(new Date());
+    // Initialize clock (server-synced). Lokal helper di dalam efek ini menghitung
+    // server-"now" dari serverClockOffsetRef — TIDAK memakai getServerNow di sini,
+    // agar daftar dependensi [fetchPlaylist, fetchQueues] tetap bersih & stabil.
+    const serverNow = () =>
+      new Date(Date.now() + serverClockOffsetRef.current);
+    setCurrentTime(serverNow());
+    setCurrentDate(serverNow());
 
-    // Update clock every second
+    // Update clock every second — follows the SERVER time (offset is kept
+    // in serverClockOffsetRef, refreshed by each /api/tv/queues poll).
     const clockInterval = setInterval(() => {
-      setCurrentTime(new Date());
-      setCurrentDate(new Date());
+      setCurrentTime(serverNow());
+      setCurrentDate(serverNow());
     }, 1000);
 
     // Load voices when available
@@ -828,6 +857,11 @@ export default function TVDisplay() {
       clearInterval(playlistInterval);
       clearInterval(clockInterval);
     };
+    // Dependensi KONSTAN & stabil: hanya fetchPlaylist & fetchQueues (keduanya
+    // dibungkus useCallback di bagian atas komponen). getServerNow TIDAK perlu
+    // dimasukkan — ia useCallback stabil (deps []) yang hanya membaca ref, dan
+    // sudah digunakan internal di dalam fetchQueues. Menjaga ukuran array tetap
+    // 2 elemen mencegah error "useEffect changed size between renders".
   }, [fetchPlaylist, fetchQueues]);
 
   // Try to unlock speech/audio automatically on page load — no click required.
@@ -1049,28 +1083,28 @@ export default function TVDisplay() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-blue-900 via-indigo-900 to-purple-900 text-white flex flex-col">
       {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-indigo-500/20 px-6 py-4 shrink-0 shadow-xl">
-        <div className="max-w-[1920px] mx-auto flex items-center justify-between">
+      <header className="h-[80px] shrink-0 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-b border-indigo-500/20 px-3 md:px-6 shadow-xl flex items-center">
+        <div className="max-w-[1920px] w-full mx-auto flex items-center justify-between gap-2">
           {/* SISI KIRI: Logo & Nama RS */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <img
               src="/img/sistem.png"
               alt="Logo RS PKU"
-              className="w-15 h-15 object-contain"
+              className="w-11 h-11 md:w-14 md:h-14 object-contain shrink-0"
             />
-            <div>
-              <h1 className="text-white font-extrabold text-2xl md:text-3xl tracking-wide uppercase">
+            <div className="min-w-0">
+              <h1 className="text-white font-extrabold text-base md:text-xl lg:text-2xl xl:text-3xl tracking-wide uppercase truncate">
                 RS PKU Muhammadiyah Gombong
               </h1>
-              <p className="text-slate-400 text-xs md:text-sm font-medium tracking-wider">
+              <p className="text-slate-400 text-[10px] md:text-xs font-medium tracking-wider">
                 Sistem Display Antrian Pelayanan
               </p>
             </div>
           </div>
 
           {/* SISI KANAN: Tanggal & Jam Digital */}
-          <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl px-5 py-2 text-right shadow-inner">
-            <div className="text-slate-300 font-medium text-xs md:text-sm">
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl px-3 md:px-5 py-1.5 md:py-2 text-right shadow-inner shrink-0">
+            <div className="text-slate-300 font-medium text-[10px] md:text-xs truncate">
               {currentDate?.toLocaleDateString("id-ID", {
                 weekday: "long",
                 day: "numeric",
@@ -1078,7 +1112,7 @@ export default function TVDisplay() {
                 year: "numeric",
               }) || "Loading..."}
             </div>
-            <div className="text-emerald-400 font-black text-2xl md:text-3xl tracking-widest font-mono drop-shadow">
+            <div className="text-emerald-400 font-black text-lg md:text-2xl xl:text-3xl tracking-widest font-mono drop-shadow">
               {currentTime
                 ?.toLocaleTimeString("id-ID", { hour12: false })
                 .replace(/\./g, ":") || "00:00:00"}
@@ -1088,11 +1122,11 @@ export default function TVDisplay() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-[1920px] mx-auto px-6 py-2 flex flex-col gap-2 overflow-hidden">
-        {/* Video + Queue */}
-        <div className="grid grid-cols-2 gap-4 w-full items-start">
+      <main className="h-[calc(100vh-80px)] w-full max-w-[1920px] mx-auto px-3 md:px-6 py-[1.5vh] flex flex-col gap-[1.5vh] overflow-hidden">
+        {/* Zone A: Video + Antrian Aktif (≈61% tinggi area utama) */}
+        <div className="grid grid-cols-2 gap-2 md:gap-4 w-full h-[61%] shrink-0 min-h-0">
           {/* Left: Video Area */}
-          <div className="relative bg-black shadow-2xl overflow-hidden rounded-lg w-full h-full min-h-[300px] flex items-center justify-center">
+          <div className="relative bg-black shadow-2xl overflow-hidden rounded-lg w-full h-full flex items-center justify-center">
             {videoType === "upload" && videoUrl ? (
               // Uploaded video
               <div
@@ -1252,37 +1286,37 @@ export default function TVDisplay() {
 
           {/* Right: Current Queue */}
           <div className="bg-gradient-to-br from-white to-gray-50 text-gray-900 shadow-2xl border-4 border-green-500 h-full flex flex-col rounded-lg">
-            <div className="text-center py-4 bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 text-white shrink-0">
-              <h2 className="text-3xl font-bold">
+            <div className="text-center py-[1vh] bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 text-white shrink-0">
+              <h2 className="text-sm md:text-lg lg:text-2xl xl:text-3xl font-bold">
                 📢 NOMOR ANTRIAN SEDANG DIPANGGIL
               </h2>
             </div>
-            <div className="text-center flex-1 flex flex-col justify-start items-center p-0 -mt-20">
+            <div className="text-center flex-1 flex flex-col justify-center items-center p-2 overflow-hidden">
               {currentQueue ? (
-                <div className="flex flex-col justify-start items-center gap-1 w-full">
+                <div className="flex flex-col justify-center items-center gap-[1vh] w-full">
                   {/* Nomor Antrian */}
-                  <div className="text-[8rem] xl:text-[10rem] font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent leading-none animate-pulse tracking-tight mt-18">
+                  <div className="text-[5.5rem] md:text-[6.5rem] xl:text-[7rem] font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent leading-none animate-pulse tracking-tight truncate">
                     {currentQueue.queueNumber || currentQueue.queue_number}
                   </div>
 
                   {/* Label Jenis Pasien & Loket */}
-                  <div className="flex justify-center gap-4">
-                    <div className="text-3xl font-bold px-8 py-2 bg-blue-600 text-white rounded-xl shadow-md">
+                  <div className="flex justify-center gap-2 md:gap-4 flex-wrap">
+                    <div className="text-base md:text-2xl lg:text-3xl font-bold px-3 md:px-8 py-1 md:py-2 bg-blue-600 text-white rounded-xl shadow-md">
                       {currentQueue.patientType ||
                       currentQueue.patient_type === "BPJS"
                         ? "🏥 BPJS"
                         : "👤 UMUM"}
                     </div>
                     {currentQueue.loket && (
-                      <div className="text-3xl font-bold px-8 py-2 bg-orange-500 text-white rounded-xl shadow-md">
+                      <div className="text-base md:text-2xl lg:text-3xl font-bold px-3 md:px-8 py-1 md:py-2 bg-orange-500 text-white rounded-xl shadow-md">
                         🖥️ {(currentQueue.loket || "").replace("_", " ")}
                       </div>
                     )}
                   </div>
 
                   {/* Pesan Arahan */}
-                  <div className="bg-green-50 rounded-2xl p-6 border-2 border-green-200 shadow-sm w-full">
-                    <p className="text-4xl font-extrabold text-green-800 tracking-wide">
+                  <div className="bg-green-50 rounded-2xl p-2 md:p-4 border-2 border-green-200 shadow-sm w-full">
+                    <p className="text-lg md:text-2xl lg:text-3xl font-extrabold text-green-800 tracking-wide">
                       Silakan menuju{" "}
                       {(currentQueue.loket || "meja pendaftaran").replace(
                         "_",
@@ -1292,9 +1326,9 @@ export default function TVDisplay() {
                   </div>
                 </div>
               ) : (
-                <div className="py-30">
-                  <div className="text-8xl text-gray-400 mb-4">⏳</div>
-                  <div className="text-4xl text-gray-500 font-semibold">
+                <div className="py-[5vh]">
+                  <div className="text-5xl md:text-7xl text-gray-400 mb-2">⏳</div>
+                  <div className="text-lg md:text-3xl text-gray-500 font-semibold">
                     Menunggu antrian...
                   </div>
                 </div>
@@ -1303,35 +1337,35 @@ export default function TVDisplay() {
           </div>
         </div>
 
-        {/* Loket 1-4 */}
-        <div className="shrink-0">
-          <h2 className="text-2xl font-bold text-center mb-4">
+        {/* Zone B: Grid 4 Loket (≈35% tinggi area utama) */}
+        <div className="h-[35%] shrink-0 flex flex-col overflow-hidden">
+          <h2 className="text-sm md:text-lg lg:text-2xl font-bold text-center mb-[1vh] truncate">
             Antrian Terakhir yang Sudah Dipanggil
           </h2>
-          <div className="grid grid-cols-4 gap-6 mt-4">
+          <div className="grid grid-cols-4 gap-2 md:gap-6 h-full flex-1 min-h-0">
             {["LOKET_1", "LOKET_2", "LOKET_3", "LOKET_4"].map(
               (loket, index) => {
                 const loketQueue = lokets[loket];
                 return (
                   <div
                     key={loket}
-                    className="bg-white/95 shadow-xl border-2 border-gray-200 rounded-xl overflow-hidden flex flex-col justify-between"
+                    className="bg-white/95 shadow-xl border-2 border-gray-200 rounded-xl overflow-hidden flex flex-col justify-between h-full min-h-0"
                   >
                     {/* Header Loket */}
-                    <div className="text-center py-4 px-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white">
-                      <h3 className="text-3xl font-extrabold tracking-wide">
+                    <div className="text-center py-2 md:py-4 px-2 md:px-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white shrink-0">
+                      <h3 className="text-base md:text-2xl xl:text-3xl font-extrabold tracking-wide truncate">
                         LOKET {index + 1}
                       </h3>
                     </div>
 
                     {/* Isi Kartu */}
-                    <div className="text-center py-10 px-4 flex-1 flex flex-col justify-center">
+                    <div className="text-center py-2 md:py-6 px-2 md:px-4 flex-1 flex flex-col justify-center min-h-0">
                       {loketQueue ? (
-                        <div className="space-y-3">
-                          <div className="text-6xl font-black text-green-600 tracking-tight">
+                        <div className="space-y-1 md:space-y-3">
+                          <div className="text-2xl md:text-5xl xl:text-6xl font-black text-green-600 tracking-tight truncate">
                             {loketQueue.queueNumber || loketQueue.queue_number}
                           </div>
-                          <div className="text-xl font-bold text-gray-700 mt-2">
+                          <div className="text-sm md:text-xl font-bold text-gray-700 mt-1 md:mt-2">
                             {(loketQueue.patientType ||
                               loketQueue.patient_type) === "BPJS"
                               ? "🏥 BPJS"
@@ -1339,7 +1373,7 @@ export default function TVDisplay() {
                           </div>
                         </div>
                       ) : (
-                        <div className="text-gray-400 text-lg">Menunggu...</div>
+                        <div className="text-gray-400 text-sm md:text-lg truncate">Menunggu...</div>
                       )}
                     </div>
                   </div>
