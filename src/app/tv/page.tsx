@@ -832,19 +832,19 @@ export default function TVDisplay() {
       fetchPlaylist();
     }, 5000);
 
-    // Initialize clock (server-synced). Lokal helper di dalam efek ini menghitung
-    // server-"now" dari serverClockOffsetRef — TIDAK memakai getServerNow di sini,
-    // agar daftar dependensi [fetchPlaylist, fetchQueues] tetap bersih & stabil.
-    const serverNow = () =>
-      new Date(Date.now() + serverClockOffsetRef.current);
-    setCurrentTime(serverNow());
-    setCurrentDate(serverNow());
+    // Initialize clock (server-synced) via getServerNow(). getServerNow menghitung
+    // selisih offset (serverClockOffsetRef vs Date.now()) sehingga jam digital
+    // di pojok kanan atas mengikuti waktu server rumah sakit secara presisi.
+    setCurrentTime(getServerNow());
+    setCurrentDate(getServerNow());
 
-    // Update clock every second — follows the SERVER time (offset is kept
-    // in serverClockOffsetRef, refreshed by each /api/tv/queues poll).
+    // Update clock every second — follows the SERVER time. getServerNow memakai
+    // serverClockOffsetRef yang terus diperbarui oleh masing-masing polling
+    // /api/tv/queues, jadi akurasi jam tetap mengikuti server walau device
+    // setempat meleset/berbeda.
     const clockInterval = setInterval(() => {
-      setCurrentTime(serverNow());
-      setCurrentDate(serverNow());
+      setCurrentTime(getServerNow());
+      setCurrentDate(getServerNow());
     }, 1000);
 
     // Load voices when available
@@ -857,12 +857,11 @@ export default function TVDisplay() {
       clearInterval(playlistInterval);
       clearInterval(clockInterval);
     };
-    // Dependensi KONSTAN & stabil: hanya fetchPlaylist & fetchQueues (keduanya
-    // dibungkus useCallback di bagian atas komponen). getServerNow TIDAK perlu
-    // dimasukkan — ia useCallback stabil (deps []) yang hanya membaca ref, dan
-    // sudah digunakan internal di dalam fetchQueues. Menjaga ukuran array tetap
-    // 2 elemen mencegah error "useEffect changed size between renders".
-  }, [fetchPlaylist, fetchQueues]);
+    // Dependensi KONSTAN & stabil (ukuran tetap 3 elemen antar-render) sehingga
+    // tidak memicu error "useEffect changed size between renders". fetchPlaylist,
+    // fetchQueues, dan getServerNow semuanya dibungkus useCallback (stabil) —
+    // getServerNow deps [] yang hanya membaca serverClockOffsetRef.
+  }, [fetchPlaylist, fetchQueues, getServerNow]);
 
   // Try to unlock speech/audio automatically on page load — no click required.
   // Browsers block speech synthesis until a user gesture. We attempt to prime
